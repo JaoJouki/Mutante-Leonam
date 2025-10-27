@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ficha de Personagem - Mutant Ano Zero</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* Fonte Padrão */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        #save-status {
+            position: fixed;
+            bottom: 15px;
+            right: 15px;
+            background-color: #e67e22;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.5s;
+            font-weight: bold;
+        }
+        #save-status.visible {
+            opacity: 1;
+        }
+
+        .character-sheet {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+        }
+
+        /* Cabeçalho */
+        header {
+            background-color: #111;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 5px solid #e67e22;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin: 0 0 5px 0;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        header h2 {
+            font-size: 1.2em;
+            margin: 0;
+            font-weight: normal;
+        }
+
+        header h3 {
+            font-size: 1em;
+            margin: 5px 0 0 0;
+            font-weight: bold;
+            color: #e67e22;
+        }
+
+        /* Conteúdo Principal (Grid) */
+        main {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Seções */
+        section {
+            background-color: #333;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+            text-transform: uppercase;
+            border-bottom: 2px solid #444;
+            padding-bottom: 5px;
+            color: #e67e22;
+        }
+        
+        /* Avatar Preview */
+        .avatar-preview-container {
+            width: 300px; /* <<< MODIFICADO */
+            height: 300px; /* <<< MODIFICADO */
+            background-color: #444;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            border: 1px solid #555;
+            margin-left: auto; /* <<< ADICIONADO */
+            margin-right: auto; /* <<< ADICIONADO */
+        }
+        
+        #player-avatar-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        #player-avatar-preview.hidden {
+            display: none;
+        }
+
+        /* Formulários */
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        .form-group-inline {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            align-items: flex-start;
+        }
+
+        .form-group-inline .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        
+        .form-group-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+
+        .form-group-check label {
+            margin-bottom: 0;
+            font-weight: normal;
+            color: #f0f0f0;
+        }
+
+        input[type="text"],
+        input[type="url"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1em;
+            background-color: #444;
+            color: #f0f0f0;
+        }
+        
+        input[type="number"] {
+            /* width: 80px; (Removido para permitir flexibilidade) */
+            text-align: center;
+        }
+
+        input[type="checkbox"] {
+            transform: scale(1.1);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        /* Bolinhas */
+        .dot-tracker {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            justify-content: space-around;
+            padding-top: 5px;
+        }
+
+        .dot-tracker input[type="checkbox"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background-color: #555;
+            margin: 0;
+            font: inherit;
+            color: currentColor;
+            width: 1.5em;
+            height: 1.5em;
+            border: 1px solid #777;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .dot-tracker input[type="checkbox"]:checked {
+            background-color: #e67e22;
+            border-color: #e67e22;
+        }
+        
+        /* [6] NOVO: Estilo para Checkboxes de Condição */
+        .conditions-grid { /* <<< MODIFICADO (era .conditions) */
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 20px; /* espaçamento linha, espaçamento coluna */
+            justify-content: flex-start;
+        }
+        
+        .form-group-check input[type="checkbox"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background-color: #555;
+            margin: 0;
+            font: inherit;
+            color: currentColor;
+            width: 1.5em;
+            height: 1.5em;
+            border: 1px solid #777;
+            border-radius: 50%; /* Torna o checkbox redondo */
+            cursor: pointer;
+            /* transform: scale(1.1); (Removido para alinhar com 'gap') */
+        }
+        
+        .form-group-check input[type="checkbox"]:checked {
+            background-color: #e67e22;
+            border-color: #e67e22;
+        }
+        /* [6] FIM: Estilo para Checkboxes de Condição */
+        
+        .form-group-inline .form-group.attribute {
+            flex-basis: 35%;
+            min-width: 90px;
+        }
+        .form-group-inline .form-group.dots {
+            flex-basis: 60%;
+        }
+
+        /* Seções Específicas */
+        .section-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #444;
+            margin-bottom: 15px;
+        }
+        
+        .section-header-flex h3 {
+            border-bottom: none;
+            margin-bottom: 5px;
+        }
+        
+        .add-btn {
+            background-color: #e67e22;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            font-size: 1.5em;
+            font-weight: bold;
+            line-height: 28px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .add-btn:hover {
+            background-color: #d35400;
+        }
+
+        /* [1] NOVO: Estilos do Rola-Dados (Modificado) */
+        .roll-controls {
+            display: flex;
+            flex-direction: column; /* Empilha os inputs */
+            gap: 10px;
+        }
+        .roll-controls .form-group {
+            flex: 1;
+            margin-bottom: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .roll-controls .form-group label {
+            margin-bottom: 0;
+            flex-basis: 60%; /* Dá mais espaço ao label */
+        }
+        .roll-controls input[type="number"] {
+            width: 80px; /* Largura fixa para os inputs de dado */
+        }
+        .roll-btn {
+            background-color: #e67e22;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px; /* Botão maior */
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%; /* Botão ocupa largura total */
+            margin-top: 10px;
+        }
+        .roll-btn:hover {
+            background-color: #d35400;
+        }
+        /* [1] Fim Estilos Rola-Dados */
+
+
+        .skills-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .skills-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #555;
+        }
+        
+        .skills-list li:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .skills-list label {
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+        
+        .skill-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .edit-btn {
+            background: none;
+            border: none;
+            color: #ccc;
+            cursor: pointer;
+            font-size: 1.1em;
+            padding: 0 5px;
+        }
+        .edit-btn:hover {
+            color: #e67e22;
+        }
+        
+        /* Tabelas */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            table-layout: fixed; /* <<< ADICIONADO */
+        }
+        th, td { 
+            border: 1px solid #555; 
+            padding: 8px; 
+            text-align: left; 
+            word-wrap: break-word; /* <<< ADICIONADO */
+        }
+        th { background-color: #444; font-size: 0.9em; }
+        table input[type="text"],
+        table input[type="number"] { 
+            width: 100%; 
+            padding: 4px; 
+            box-sizing: border-box; /* <<< ADICIONADO */
+        }
+        /* table input[type="number"] { width: 60px; } <<< REMOVIDO */
+        
+        /* --- LARGURA DAS COLUNAS DA TABELA DE ARMAS (ADICIONADO) --- */
+        .weapons-table th:nth-child(1) { width: 35%; } /* Arma */
+        .weapons-table th:nth-child(2) { width: 15%; } /* Bônus */
+        .weapons-table th:nth-child(3) { width: 15%; } /* Dano */
+        .weapons-table th:nth-child(4) { width: 15%; } /* Alcance */
+        .weapons-table th:nth-child(5) { width: 20%; } /* Obs. */
+
+        .weapons-table td input[type="number"] {
+            text-align: center;
+        }
+        /* --- FIM (ADICIONADO) --- */
+
+        
+        /* Modal */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #333;
+            padding: 25px;
+            border: 1px solid #555;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        .modal-content h4 { margin-top: 0; color: #e67e22; }
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-buttons button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .modal-buttons .btn-cancel { background-color: #777; color: #fff; }
+        .modal-buttons .btn-save { background-color: #e67e22; color: #fff; }
+
+        /* [3] NOVO: Estilos do Modal de Rolagem (Modificado) */
+        .dice-result-content {
+            background-color: #e67e22; /* Fundo laranja */
+            color: #fff;
+            text-align: center;
+            max-width: 500px;
+        }
+        
+        .dice-result-content h4 {
+            color: #fff; /* Título branco */
+            font-size: 1.5em;
+            border-bottom: 2px solid #d35400; /* Laranja mais escuro */
+            padding-bottom: 10px;
+        }
+        
+        #dice-result-details {
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+
+        #dice-result-dice {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .die-box {
+            background-color: #fff;
+            color: #1a1a1a;
+            width: 50px;
+            height: 50px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            font-weight: normal; /* Normal por padrão */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            color: #fff; /* Cor do texto branca para contraste */
+        }
+        
+        /* [4] Cores dos Dados */
+        .die-box.attribute { background-color: #2ecc71; } /* Verde */
+        .die-box.skill { background-color: #e74c3c; } /* Vermelho */
+        .die-box.gear { background-color: #3498db; } /* Azul */
+        
+        .die-box strong {
+            font-weight: 900; /* Super-negrito para o 6 */
+            color: #fff; /* Cor do 6 também branca */
+            text-shadow: 0 0 5px rgba(0,0,0,0.5); /* Sombra para destacar */
+        }
+
+        #dice-result-summary {
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+
+        .dice-result-content .modal-buttons {
+            justify-content: center; /* Centralizar o botão fechar */
+        }
+        
+        .dice-result-content .modal-buttons .btn-save {
+            background-color: #fff; /* Botão branco */
+            color: #e67e22; /* Texto laranja */
+        }
+        /* [3] FIM: Estilos do Modal de Rolagem */
+
+    </style>
+</head>
+<body>
+    
+    <form class="character-sheet" id="character-sheet-form">
+        <header>
+            <h1>MUTANT</h1>
+            <h2>FICHA DE PERSONAGEM</h2>
+            <h3>ANO ZERO</h3>
+        </header>
+
+        <main>
+            <div class="column">
+                
+                <section class="basic-info">
+                    <div class="avatar-preview-container">
+                        <img id="player-avatar-preview" src="" alt="Avatar do Personagem" class="hidden">
+                    </div>
+                
+                    <div class="form-group">
+                        <label for="imagemUrl">URL da Imagem do Personagem:</label>
+                        <input type="url" id="imagemUrl" name="imagemUrl" placeholder="Cole o link da imagem aqui">
+                    </div>
+                    <div class="form-group-inline">
+                        <div class="form-group">
+                            <label for="nome">Nome:</label>
+                            <input type="text" id="nome" name="nome" placeholder="Coloque seu nome aqui">
+                        </div>
+                        <div class="form-group">
+                            <label for="papel">Papel:</label>
+                            <select id="papel" name="papel">
+                                <option value="">Escolha um papel...</option>
+                                <option value="adestrador-de-caes">Adestrador de Cães</option>
+                                <option value="chefao">Chefão</option>
+                                <option value="batedor">Batedor</option>
+                                <option value="brutamonte">Brutamonte</option>
+                                <option value="engenhoqueiro">Engenhoqueiro</option>
+                                <option value="negociante">Negociante</option>
+                                <option value="cronista">Cronista</option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dice-roller">
+                    <h3>ROLA-DADOS (D6)</h3>
+                    <div class="roll-controls">
+                        <div class="form-group">
+                            <label for="roll-attribute">DADOS DE ATRIBUTO</label>
+                            <input type="number" id="roll-attribute" value="0" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="roll-skill">DADOS DE PERÍCIA</label>
+                            <input type="number" id="roll-skill" value="0" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="roll-gear">DADOS DE EQUIPAMENTO</label>
+                            <input type="number" id="roll-gear" value="0" min="0">
+                        </div>
+                        <button type="button" id="roll-dice-btn" class="roll-btn">ROLAR</button>
+                    </div>
+                </section>
+                <section class="attributes">
+                    <h3>ATRIBUTOS</h3>
+                    <div class="form-group-inline">
+                        <div class="form-group attribute">
+                            <label for="forca">Força</label>
+                            <input type="number" id="forca" name="forca" min="0" value="0">
+                        </div>
+                        <div class="form-group dots">
+                            <label>Dano</label>
+                            <div class="dot-tracker">
+                                <input type="checkbox" id="dano1" name="dano1">
+                                <input type="checkbox" id="dano2" name="dano2">
+                                <input type="checkbox" id="dano3" name="dano3">
+                                <input type="checkbox" id="dano4" name="dano4">
+                                <input type="checkbox" id="dano5" name="dano5">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group-inline">
+                        <div class="form-group attribute">
+                            <label for="agilidade">Agilidade</label>
+                            <input type="number" id="agilidade" name="agilidade" min="0" value="0">
+                        </div>
+                        <div class="form-group dots">
+                            <label>Fadiga</label>
+                            <div class="dot-tracker">
+                                <input type="checkbox" id="fadiga1" name="fadiga1">
+                                <input type="checkbox" id="fadiga2" name="fadiga2">
+                                <input type="checkbox" id="fadiga3" name="fadiga3">
+                                <input type="checkbox" id="fadiga4" name="fadiga4">
+                                <input type="checkbox" id="fadiga5" name="fadiga5">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group-inline">
+                        <div class="form-group attribute">
+                            <label for="astucia">Astúcia</label>
+                            <input type="number" id="astucia" name="astucia" min="0" value="0">
+                        </div>
+                        <div class="form-group dots">
+                            <label>Confusão</label>
+                            <div class="dot-tracker">
+                                <input type="checkbox" id="confusao1" name="confusao1">
+                                <input type="checkbox" id="confusao2" name="confusao2">
+                                <input type="checkbox" id="confusao3" name="confusao3">
+                                <input type="checkbox" id="confusao4" name="confusao4">
+                                <input type="checkbox" id="confusao5" name="confusao5">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group-inline">
+                        <div class="form-group attribute">
+                            <label for="empatia">Empatia</label>
+                            <input type="number" id="empatia" name="empatia" min="0" value="0">
+                        </div>
+                        <div class="form-group dots">
+                            <label>Dúvida</label>
+                            <div class="dot-tracker">
+                                <input type="checkbox" id="duvida1" name="duvida1">
+                                <input type="checkbox" id="duvida2" name="duvida2">
+                                <input type="checkbox" id="duvida3" name="duvida3">
+                                <input type="checkbox" id="duvida4" name="duvida4">
+                                <input type="checkbox" id="duvida5" name="duvida5">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="conditions">
+                    <h3>CONDIÇÕES</h3>
+                    <div class="conditions-grid"> 
+                        <div class="form-group-check">
+                            <input type="checkbox" id="faminto" name="faminto">
+                            <label for="faminto">Faminto</label>
+                        </div>
+                        <div class="form-group-check">
+                            <input type="checkbox" id="desidratado" name="desidratado">
+                            <label for="desidratado">Desidratado</label>
+                        </div>
+                        <div class="form-group-check">
+                            <input type="checkbox" id="insone" name="insone">
+                            <label for="insone">Insone</label>
+                        </div>
+                        <div class="form-group-check">
+                            <input type="checkbox" id="hipotermico" name="hipotermico">
+                            <label for="hipotermico">Hipotérmico</label>
+                        </div>
+                    </div> </section>
+                <section class="skills">
+                    <div class="section-header-flex">
+                        <h3>PERÍCIAS</h3>
+                        <button type="button" class="add-btn" id="add-skill-btn">+</button>
+                    </div>
+                    
+                    <ul class="skills-list" id="skills-list">
+                        <li>
+                            <div class="skill-info">
+                                <label for="atirar">Atirar (Agilidade)</label>
+                                </div>
+                            <input type="number" id="atirar" name="atirar" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="compreender">Compreender (Astúcia)</label>
+                            </div>
+                            <input type="number" id="compreender" name="compreender" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="conhecer-zona">Conhecer a Zona (Astúcia)</label>
+                            </div>
+                            <input type="number" id="conhecer-zona" name="conhecer-zona" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="curar">Curar (Empatia)</label>
+                            </div>
+                            <input type="number" id="curar" name="curar" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="esgueirar">Esgueirar (Agilidade)</label>
+                            </div>
+                            <input type="number" id="esgueirar" name="esgueirar" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="impelir">Impelir (Força)</label>
+                            </div>
+                            <input type="number" id="impelir" name="impelir" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="lutar">Lutar (Força)</label>
+                            </div>
+                            <input type="number" id="lutar" name="lutar" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="manipular">Manipular (Empatia)</label>
+                            </div>
+                            <input type="number" id="manipular" name="manipular" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="mover">Mover (Agilidade)</label>
+                            </div>
+                            <input type="number" id="mover" name="mover" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="observar">Observar (Astúcia)</label>
+                            </div>
+                            <input type="number" id="observar" name="observar" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="sentir-emocoes">Sentir Emoções (Empatia)</label>
+                            </div>
+                            <input type="number" id="sentir-emocoes" name="sentir-emocoes" min="0" value="0">
+                        </li>
+                        <li>
+                            <div class="skill-info">
+                                <label for="suportar">Suportar (Força)</label>
+                            </div>
+                            <input type="number" id="suportar" name="suportar" min="0" value="0">
+                        </li>
+                        
+                        </ul>
+                </section>
+                
+            </div>
+            
+            <div class="column">
+                
+                <section class="history">
+                    <h3>HISTÓRIA</h3>
+                    <textarea id="historia" name="historia" rows="8" placeholder="Descreva a história, antecedentes e personalidade do seu personagem..."></textarea>
+                </section>
+                
+                <section class="critical-injuries">
+                    <h3>Ferimentos Graves:</h3>
+                    <textarea id="ferimentos" name="ferimentos" rows="4"></textarea>
+                </section>
+
+                <section class="talents">
+                    <h3>TALENTOS</h3>
+                    <textarea id="talentos" name="talentos" rows="5"></textarea>
+                </section>
+
+                <section class="mutations">
+                    <h3>MUTAÇÕES</h3>
+                    <textarea id="mutacoes" name="mutacoes" rows="5"></textarea>
+                </section>
+                
+                <section class="trackers">
+                    <div class="form-group">
+                        <label for="pontos-mutacao">PONTOS DE MUTAÇÃO</label>
+                        <input type="number" id="pontos-mutacao" name="pontos-mutacao" value="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="pontos-experiencia">PONTOS DE EXPERIÊNCIA</label>
+                        <input type="number" id="pontos-experiencia" name="pontos-experiencia" value="0">
+                    </div>
+                </section>
+                
+                <section class="armor">
+                    <h3>ARMADURA</h3>
+                    <div class="form-group-inline">
+                        <div class="form-group">
+                            <label for="protecao">Proteção</label>
+                            <input type="number" id="protecao" name="protecao" min="0" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="balas">Balas</label>
+                            <input type="number" id="balas" name="balas" min="0" value="0">
+                        </div>
+                    </div>
+                </section>
+
+                <section class="equipment">
+                    <h3>EQUIPAMENTO</h3>
+                    <textarea id="equipamento" name="equipamento" rows="6"></textarea>
+                </section>
+                
+                <section class="small-items">
+                    <h3>ITENS PEQUENOS</h3>
+                    <textarea id="itens-pequenos" name="itens-pequenos" rows="4"></textarea>
+                </section>
+                
+            </div>
+            
+            <div class="column">
+            
+                <section class="mutation-abilities">
+                    <h3>HABILIDADES DA MUTAÇÃO</h3>
+                    <textarea id="habilidades-mutacao" name="habilidades-mutacao" rows="10" placeholder="Descreva as habilidades desbloqueadas da sua mutação aqui..."></textarea>
+                </section>
+
+                <section class="weapons">
+                    <h3>ARMAS</h3>
+                    <table class="weapons-table">
+                        <thead>
+                            <tr>
+                                <th>Arma</th>
+                                <th>Bônus</th>
+                                <th>Dano</th>
+                                <th>Alcance</th>
+                                <th>Obs.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="text" name="arma-1-nome"></td>
+                                <td><input type="number" name="arma-1-bonus" value="0"></td>
+                                <td><input type="number" name="arma-1-dano" value="0"></td>
+                                <td><input type="text" name="arma-1-alcance"></td>
+                                <td><input type="text" name="arma-1-obs"></td>
+                            </tr>
+                            <tr>
+                                <td><input type="text" name="arma-2-nome"></td>
+                                <td><input type="number" name="arma-2-bonus" value="0"></td>
+                                <td><input type="number" name="arma-2-dano" value="0"></td>
+                                <td><input type="text" name="arma-2-alcance"></td>
+                                <td><input type="text" name="arma-2-obs"></td>
+                            </tr>
+                            <tr>
+                                <td><input type="text" name="arma-3-nome"></td>
+                                <td><input type="number" name="arma-3-bonus" value="0"></td>
+                                <td><input type="number" name="arma-3-dano" value="0"></td>
+                                <td><input type="text" name="arma-3-alcance"></td>
+                                <td><input type="text" name="arma-3-obs"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="notes">
+                    <h3>NOTAS</h3>
+                    <textarea id="notas" name="notas" rows="6"></textarea>
+                </section>
+
+            </div>
+        </main>
+    </form>
+    
+    <div id="save-status">Salvando...</div>
+
+    <div class="modal-backdrop" id="skill-modal" style="display: none;">
+        <div class="modal-content">
+            <h4 id="modal-title">Adicionar Nova Perícia</h4>
+            <div class="form-group">
+                <label for="modal-skill-name">Nome da Perícia:</label>
+                <input type="text" id="modal-skill-name" placeholder="Ex: Arrombar">
+            </div>
+            <div class="form-group">
+                <label for="modal-skill-attribute">Atributo Base:</label>
+                <select id="modal-skill-attribute">
+                    <option value="Força">Força</option>
+                    <option value="Agilidade">Agilidade</option>
+                    <option value="Astúcia">Astúcia</option>
+                    <option value="Empatia">Empatia</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="modal-skill-value">Valor:</label>
+                <input type="number" id="modal-skill-value" value="0" min="0">
+            </div>
+            <div class="modal-buttons">
+                <button type="button" class="btn-cancel" id="modal-cancel-btn">Cancelar</button>
+                <button type="button" class="btn-save" id="modal-save-btn">Salvar</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-backdrop" id="dice-result-modal" style="display: none;">
+        <div class="modal-content dice-result-content">
+            <h4 id="dice-result-title">Resultado da Rolagem</h4>
+            <p id="dice-result-details">Você rolou 0 dado(s).</p>
+            <div id="dice-result-dice">
+                </div>
+            <p id="dice-result-summary">Total de Sucessos: 0</p>
+            <div class="modal-buttons">
+                 <button type="button" class="btn-save" id="dice-result-close-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
+    
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const form = document.getElementById('character-sheet-form');
+            const saveStatus = document.getElementById('save-status');
+            const avatarPreview = document.getElementById('player-avatar-preview');
+            const imageUrlInput = document.getElementById('imagemUrl');
+            
+            const playerId = window.location.pathname.split('/').pop();
+            let saveTimeout;
+            const socket = io();
+
+            // --- LÓGICA DE CARREGAR E SALVAR DADOS ---
+
+            async function loadCharacterData() {
+                if (!playerId) return;
+                try {
+                    const response = await fetch(`/api/player/${playerId}`);
+                    if (!response.ok) throw new Error('Falha ao buscar dados.');
+                    const data = await response.json();
+                    populateForm(data);
+                } catch (error) {
+                    console.error("Erro ao carregar dados:", error);
+                    showSaveStatus('Erro ao carregar ficha.', '#c0392b');
+                }
+            }
+
+            function populateForm(data) {
+                updateAvatarPreview(data.imagemUrl);
+                skillsList.querySelectorAll('li.custom-skill').forEach(li => li.remove());
+                
+                const elements = form.elements;
+                for (const key in data) {
+                    const element = elements[key];
+                    if (element) {
+                        if (element.type === 'checkbox') {
+                            element.checked = data[key] === 'on';
+                        } else if (key.startsWith('custom-skill-name-')) {
+                            const skillId = key.split('custom-skill-name-')[1];
+                            const name = data[key];
+                            const attribute = data[`custom-skill-attribute-${skillId}`];
+                            const value = data[`custom-skill-value-${skillId}`];
+                            if (name) {
+                                createSkillElement(name, attribute, value, true, skillId);
+                            }
+                        } else if (!key.startsWith('custom-skill-')) { 
+                           element.value = data[key];
+                        }
+                    }
+                }
+            }
+            
+            function updateAvatarPreview(url) {
+                if (url) {
+                    avatarPreview.src = url;
+                    avatarPreview.classList.remove('hidden');
+                } else {
+                    avatarPreview.src = '';
+                    avatarPreview.classList.add('hidden');
+                }
+            }
+
+            function showSaveStatus(message = 'Salvando...', color = '#e67e22') {
+                saveStatus.textContent = message;
+                saveStatus.style.backgroundColor = color;
+                saveStatus.classList.add('visible');
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(() => {
+                    saveStatus.classList.remove('visible');
+                }, 2000);
+            }
+            
+            async function saveCharacterData() {
+                const formData = new FormData(form);
+                const data = Object.fromEntries(formData.entries());
+                data.id = playerId;
+                
+                form.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                    data[checkbox.name] = checkbox.checked ? 'on' : 'off';
+                });
+
+                showSaveStatus('Salvando...');
+                
+                try {
+                    const response = await fetch(`/api/player/${playerId}/update`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data),
+                    });
+                    if (!response.ok) throw new Error('Falha ao salvar dados.');
+                    showSaveStatus('Salvo!');
+                } catch (error) {
+                    console.error("Erro ao salvar:", error);
+                    showSaveStatus('Erro ao Salvar!', '#c0392b');
+                }
+            }
+            
+            // --- Event Listeners para Auto-Save e Preview ---
+
+            imageUrlInput.addEventListener('input', () => {
+                updateAvatarPreview(imageUrlInput.value);
+            });
+
+            form.addEventListener('input', (event) => {
+                if (event.target.type === 'text' || event.target.type === 'textarea' || event.target.type === 'url') {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(saveCharacterData, 1000);
+                }
+            });
+
+            form.addEventListener('change', (event) => {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(saveCharacterData, 300);
+            });
+            
+            // --- [2] NOVO: LÓGICA DE ROLAGEM DE DADOS (COM MODAL E CORES) ---
+            const rollDiceBtn = document.getElementById('roll-dice-btn');
+            // Inputs dos dados
+            const rollAttribute = document.getElementById('roll-attribute');
+            const rollSkill = document.getElementById('roll-skill');
+            const rollGear = document.getElementById('roll-gear');
+            
+            // Elementos do Modal de Rolagem
+            const diceResultModal = document.getElementById('dice-result-modal');
+            const diceResultTitle = document.getElementById('dice-result-title');
+            const diceResultDetails = document.getElementById('dice-result-details');
+            const diceResultDice = document.getElementById('dice-result-dice');
+            const diceResultSummary = document.getElementById('dice-result-summary');
+            const diceResultCloseBtn = document.getElementById('dice-result-close-btn');
+
+            function openDiceResultModal(rollData) {
+                diceResultTitle.textContent = `Resultado da Rolagem`;
+                // [2] Mostra o detalhamento dos dados
+                diceResultDetails.textContent = `Você rolou ${rollData.totalDice} dado(s) (${rollData.breakdown.attribute} Atr, ${rollData.breakdown.skill} Per, ${rollData.breakdown.gear} Eqp).`;
+                diceResultSummary.textContent = `Total de Sucessos: ${rollData.successes}`;
+                
+                diceResultDice.innerHTML = ''; 
+                
+                // [2] Cria os dados com cores
+                rollData.results.forEach(roll => {
+                    const dieBox = document.createElement('div');
+                    dieBox.className = 'die-box';
+                    dieBox.classList.add(roll.type); // Adiciona 'attribute', 'skill', or 'gear'
+                    
+                    // [5] Adiciona <strong>6</strong> se for um sucesso
+                    dieBox.innerHTML = (roll.value === 6) ? `<strong>6</strong>` : roll.value;
+                    diceResultDice.appendChild(dieBox);
+                });
+                
+                diceResultModal.style.display = 'flex';
+            }
+            
+            function closeDiceResultModal() {
+                diceResultModal.style.display = 'none';
+            }
+
+            diceResultCloseBtn.addEventListener('click', closeDiceResultModal);
+            diceResultModal.addEventListener('click', (event) => {
+                if (event.target === diceResultModal) {
+                    closeDiceResultModal();
+                }
+            });
+
+
+            rollDiceBtn.addEventListener('click', () => {
+                // [2] Pega a quantidade de cada tipo de dado
+                const attributeQty = parseInt(rollAttribute.value) || 0;
+                const skillQty = parseInt(rollSkill.value) || 0;
+                const gearQty = parseInt(rollGear.value) || 0;
+                
+                const totalQuantity = attributeQty + skillQty + gearQty;
+                if (totalQuantity === 0) return; // Não rola se for 0
+
+                let results = [];
+                
+                // Função para rolar um d6
+                const rollD6 = () => Math.floor(Math.random() * 6) + 1;
+
+                // [2] Rola os dados de Atributo (Verde)
+                for (let i = 0; i < attributeQty; i++) {
+                    results.push({ value: rollD6(), type: 'attribute' });
+                }
+                // [2] Rola os dados de Perícia (Vermelho)
+                for (let i = 0; i < skillQty; i++) {
+                    results.push({ value: rollD6(), type: 'skill' });
+                }
+                // [2] Rola os dados de Equipamento (Azul)
+                for (let i = 0; i < gearQty; i++) {
+                    results.push({ value: rollD6(), type: 'gear' });
+                }
+                
+                // [5] Calcula sucessos (qualquer dado com valor 6)
+                let successes = results.filter(r => r.value === 6).length;
+                
+                const rollData = {
+                    playerId: playerId,
+                    playerName: document.getElementById('nome').value || 'Mutante',
+                    results: results, // Array de objetos {value, type}
+                    successes: successes,
+                    totalDice: totalQuantity,
+                    breakdown: { // Detalhamento para o log
+                        attribute: attributeQty,
+                        skill: skillQty,
+                        gear: gearQty
+                    }
+                };
+                
+                socket.emit('playerRoll', rollData);
+            });
+
+            socket.on('rollResult', (rollData) => {
+                if (rollData.playerId === playerId) {
+                    openDiceResultModal(rollData);
+                }
+            });
+            // --- [2] FIM: LÓGICA DE ROLAGEM ---
+
+
+            // --- CÓDIGO DO MODAL DE PERÍCIA (Sem alterações) ---
+            const addSkillBtn = document.getElementById('add-skill-btn');
+            const skillModal = document.getElementById('skill-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalCancelBtn = document.getElementById('modal-cancel-btn');
+            const modalSaveBtn = document.getElementById('modal-save-btn');
+            const modalSkillName = document.getElementById('modal-skill-name');
+            const modalSkillAttribute = document.getElementById('modal-skill-attribute');
+            const modalSkillValue = document.getElementById('modal-skill-value');
+            const skillsList = document.getElementById('skills-list');
+            
+            let editingLi = null;
+            let currentEditingSkillId = null;
+
+            function resetModal() {
+                modalTitle.textContent = 'Adicionar Nova Perícia';
+                modalSkillName.value = '';
+                modalSkillAttribute.value = 'Força';
+                modalSkillValue.value = '0';
+                editingLi = null;
+                currentEditingSkillId = null;
+            }
+
+            function openModal() { skillModal.style.display = 'flex'; }
+            function closeModal() { skillModal.style.display = 'none'; resetModal(); }
+
+            function createSkillElement(name, attribute, value, isCustom = false, existingSkillId = null) {
+                const li = document.createElement('li');
+                if (isCustom) li.classList.add('custom-skill');
+                
+                const skillId = existingSkillId || Date.now().toString();
+                
+                const nameInputName = `custom-skill-name-${skillId}`;
+                const attrInputName = `custom-skill-attribute-${skillId}`;
+                const valueInputName = `custom-skill-value-${skillId}`;
+                const valueInputId = `custom-skill-value-id-${skillId}`;
+
+                li.dataset.name = name;
+                li.dataset.attribute = attribute;
+                li.dataset.skillId = skillId;
+
+                li.innerHTML = `
+                    <div class="skill-info">
+                        <label for="${valueInputId}">${name} (${attribute})</label>
+                        <button type="button" class="edit-btn">✏️</button>
+                    </div>
+                    <input type="hidden" name="${nameInputName}" value="${name}">
+                    <input type="hidden" name="${attrInputName}" value="${attribute}">
+                    <input type="number" id="${valueInputId}" name="${valueInputName}" min="0" value="${value}">
+                `;
+                
+                skillsList.appendChild(li);
+                
+                li.querySelector(`input[name="${valueInputName}"]`).addEventListener('change', (event) => {
+                    form.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                
+                return li;
+            }
+            
+            function updateSkillElement(li, name, attribute, value) {
+                li.dataset.name = name;
+                li.dataset.attribute = attribute;
+                
+                const label = li.querySelector('label');
+                const nameInput = li.querySelector('input[type="hidden"][name^="custom-skill-name"]');
+                const attrInput = li.querySelector('input[type="hidden"][name^="custom-skill-attribute"]');
+                const valueInput = li.querySelector('input[type="number"]');
+                
+                label.textContent = `${name} (${attribute})`;
+                nameInput.value = name;
+                attrInput.value = attribute;
+                valueInput.value = value;
+            }
+
+            addSkillBtn.addEventListener('click', () => { resetModal(); openModal(); });
+            modalCancelBtn.addEventListener('click', closeModal);
+
+            modalSaveBtn.addEventListener('click', () => {
+                const name = modalSkillName.value.trim();
+                const attribute = modalSkillAttribute.value;
+                const value = modalSkillValue.value;
+                
+                if (name === '') {
+                    showSaveStatus('Insira um nome para a perícia.', '#c0392b');
+                    return;
+                }
+                
+                if (editingLi) {
+                    updateSkillElement(editingLi, name, attribute, value);
+                } else {
+                    createSkillElement(name, attribute, value, true, currentEditingSkillId);
+                }
+                
+                closeModal();
+                form.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            
+            skillsList.addEventListener('click', (event) => {
+                if (event.target.classList.contains('edit-btn')) {
+                    const li = event.target.closest('li');
+                    if (!li.classList.contains('custom-skill')) {
+                         showSaveStatus('Não é possível editar perícias padrão.', '#c0392b');
+                         return;
+                    }
+                    
+                    editingLi = li;
+                    currentEditingSkillId = li.dataset.skillId;
+                    
+                    modalTitle.textContent = 'Editar Perícia';
+                    modalSkillName.value = li.dataset.name;
+                    modalSkillAttribute.value = li.dataset.attribute;
+                    modalSkillValue.value = li.querySelector('input[type="number"]').value;
+                    
+                    openModal();
+                }
+            });
+            
+            // --- INICIALIZAÇÃO ---
+            loadCharacterData();
+
+        });
+    </script>
+    
+</body>
+</html>

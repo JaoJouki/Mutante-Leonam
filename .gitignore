@@ -1,0 +1,10 @@
+# Dependências do Node (Arquivos grandes e temporários)
+/node_modules
+
+# Variáveis de Ambiente e Segredos (MUITO IMPORTANTE!)
+# O MONGODB_URI está aqui dentro. NUNCA envie este arquivo.
+.env
+
+# Logs e Dados Gerados Automaticamente
+npm-debug.log*
+.DS_Store # Arquivos de metadados do macOS
