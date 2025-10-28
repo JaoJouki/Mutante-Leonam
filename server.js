@@ -1,60 +1,55 @@
-// server.js (REVERTIDO PARA BANCO EM MEMÓRIA)
+// server.js (COM BANCO DE DADOS MONGODB)
 
 const http = require('http');
 const path = require('path');
 const express = require('express');
-const crypto = require('crypto');
+// const crypto = require('crypto'); // Não é mais necessário para IDs
 const socketIo = require('socket.io');
 
-// --- Mongoose e DotEnv REMOVIDOS ---
-// const mongoose = require('mongoose');
-// require('dotenv').config(); 
-// const Player = require('./models/Player');
+// --- Mongoose e DotEnv ADICIONADOS ---
+const mongoose = require('mongoose');
+require('dotenv').config(); // Carrega o .env
+const Player = require('./models/Player'); // Importa o "molde"
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const port = process.env.PORT || 3000;
 
-// --- "Banco de Dados" em memória RE-ADICIONADO ---
-let playersDB = {}; // Armazena os jogadores aqui
+// --- Banco de Dados em memória REMOVIDO ---
+// let playersDB = {}; 
 
-// --- Funções de Persistência (Removidas) ---
-// ...
+// --- Função de Conexão com o Banco ---
+async function connectToDB() {
+    try {
+        // Pega a string de conexão do arquivo .env (ou das variáveis do Render)
+        await mongoose.connect(process.env.MONGODB_URI);
+        console.log("Conectado ao MongoDB com sucesso!");
+    } catch (error) {
+        console.error("Erro ao conectar ao MongoDB:", error);
+        process.exit(1); // Sai da aplicação se não conseguir conectar
+    }
+}
 
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// --- API ROUTES (Modificadas sem async/await) ---
+// --- API ROUTES (Modificadas com async/await) ---
 
 // [API] Rota para criar um novo jogador
-app.post('/api/player', (req, res) => {
+app.post('/api/player', async (req, res) => { // 'async' adicionado
     try {
-        const playerId = crypto.randomBytes(8).toString('hex');
+        // Cria um novo jogador com os valores padrão
+        // definidos no Schema (models/Player.js)
+        const newPlayer = new Player({});
         
-        // Objeto padrão do novo jogador
-        const newPlayer = {
-            id: playerId,
-            nome: "Novo Mutante",
-            papel: "",
-            imagemUrl: "",
-            forca: 0, agilidade: 0, astucia: 0, empatia: 0,
-            dano1: 'off', dano2: 'off', dano3: 'off', dano4: 'off', dano5: 'off',
-            fadiga1: 'off', fadiga2: 'off', fadiga3: 'off', fadiga4: 'off', fadiga5: 'off',
-            confusao1: 'off', confusao2: 'off', confusao3: 'off', confusao4: 'off', confusao5: 'off',
-            duvida1: 'off', duvida2: 'off', duvida3: 'off', duvida4: 'off', duvida5: 'off',
-            faminto: 'off', desidratado: 'off', insone: 'off', hipotermico: 'off',
-            'pontos-mutacao': 10,
-            protecao: 0,
-            balas: 0
-        };
-
-        playersDB[playerId] = newPlayer; // Salva no objeto em memória
+        await newPlayer.save(); // Salva no banco de dados
         
-        console.log(`Novo jogador criado. ID: ${playerId}`);
+        console.log(`Novo jogador criado. ID: ${newPlayer.id}`);
         
-        io.emit('playerCreated', newPlayer); // Notifica todos os clientes
-        res.json(newPlayer);
+        // .toObject() é importante para enviar os dados com o 'id' virtual
+        io.emit('playerCreated', newPlayer.toObject()); 
+        res.json(newPlayer.toObject());
 
     } catch (error) {
         console.error("Erro ao criar jogador:", error);
@@ -63,11 +58,11 @@ app.post('/api/player', (req, res) => {
 });
 
 // [API] Rota para o Mestre buscar TODOS os jogadores
-app.get('/api/players', (req, res) => {
+app.get('/api/players', async (req, res) => { // 'async' adicionado
     try {
-        // Converte o objeto de jogadores em um array
-        const players = Object.values(playersDB); 
-        res.json(players);
+        const players = await Player.find({}); // Busca todos no banco
+        // Converte cada jogador para objeto para incluir o 'id' virtual
+        res.json(players.map(p => p.toObject()));
     } catch (error) {
         console.error("Erro ao buscar jogadores:", error);
         res.status(500).json({ error: "Falha ao buscar jogadores" });
@@ -75,13 +70,13 @@ app.get('/api/players', (req, res) => {
 });
 
 // [API] Rota para um jogador buscar SEUS dados
-app.get('/api/player/:id', (req, res) => {
+app.get('/api/player/:id', async (req, res) => { // 'async' adicionado
     try {
         const { id } = req.params;
-        const playerData = playersDB[id]; // Busca no objeto em memória
+        const playerData = await Player.findById(id); // Busca pelo _id
         
         if (playerData) {
-            res.json(playerData);
+            res.json(playerData.toObject());
         } else {
             res.status(404).json({ error: "Jogador não encontrado" });
         }
@@ -92,19 +87,23 @@ app.get('/api/player/:id', (req, res) => {
 });
 
 // [API] Rota para um jogador SALVAR seus dados
-app.post('/api/player/:id/update', (req, res) => {
+app.post('/api/player/:id/update', async (req, res) => { // 'async' adicionado
     try {
         const { id } = req.params;
-        const updatedPlayer = playersDB[id];
+        
+        // Encontra e atualiza o jogador.
+        // 'new: true' retorna o documento atualizado
+        // O req.body é salvo diretamente (funciona por causa do strict: false)
+        const updatedPlayer = await Player.findByIdAndUpdate(
+            id, 
+            req.body, 
+            { new: true } 
+        );
 
         if (updatedPlayer) {
-            // Atualiza os dados do jogador em memória mesclando o req.body
-            playersDB[id] = { ...updatedPlayer, ...req.body };
+            console.log(`Dados salvos para o jogador: ${updatedPlayer.nome || id}`);
             
-            console.log(`Dados salvos para o jogador: ${playersDB[id].nome || id}`);
-            
-            // Emite a atualização para todos os clientes
-            io.emit('playerUpdated', playersDB[id]);
+            io.emit('playerUpdated', updatedPlayer.toObject());
             
             res.json({ success: true, message: "Dados salvos." });
         } else {
@@ -117,17 +116,14 @@ app.post('/api/player/:id/update', (req, res) => {
 });
 
 // [API] Rota para REMOVER um jogador
-app.post('/api/player/:id/delete', (req, res) => {
+app.post('/api/player/:id/delete', async (req, res) => { // 'async' adicionado
     try {
         const { id } = req.params;
-        const deletedPlayer = playersDB[id];
+        const deletedPlayer = await Player.findByIdAndDelete(id); // Deleta do banco
 
         if (deletedPlayer) {
-            delete playersDB[id]; // Remove do objeto em memória
-            
             console.log(`Jogador removido: ${deletedPlayer.nome} (ID: ${id})`);
             
-            // Notifica todos os clientes que este jogador foi removido
             io.emit('playerDeleted', id); 
             
             res.json({ success: true, message: "Jogador removido." });
@@ -141,16 +137,15 @@ app.post('/api/player/:id/delete', (req, res) => {
 });
 
 
-// --- PAGE ROUTES (Modificadas sem async/await) ---
+// --- PAGE ROUTES (Modificadas com async/await) ---
 
 app.get('/dm', (req, res) => {
     res.sendFile(path.join(__dirname, 'dm.html'));
 });
 
-app.get('/player/:id', (req, res) => { // Rota não é mais async
+app.get('/player/:id', async (req, res) => { // 'async' adicionado
     try {
-        // Verifica se o jogador existe no DB em memória
-        const player = playersDB[req.params.id]; 
+        const player = await Player.findById(req.params.id); // Busca no DB
         
         if (player) {
             res.sendFile(path.join(__dirname, 'index.html'));
@@ -158,7 +153,12 @@ app.get('/player/:id', (req, res) => { // Rota não é mais async
             res.status(404).send('<h1>404 - Ficha de Jogador Não Encontrada</h1><p>Verifique o link ou peça ao Mestre para criar uma nova ficha.</p>');
         }
     } catch (error) {
-        res.status(500).send('<h1>Erro no servidor ao buscar jogador</h1>');
+        // Trata erro de ID mal formatado (ex: ID curto demais)
+        if (error.kind === 'ObjectId') {
+             res.status(404).send('<h1>404 - Ficha de Jogador Não Encontrada</h1><p>O ID fornecido não é válido.</p>');
+        } else {
+            res.status(500).send('<h1>Erro no servidor ao buscar jogador</h1>');
+        }
     }
 });
 
@@ -181,8 +181,11 @@ io.on('connection', (socket) => {
 });
 
 
-// --- NOVO: Start the server (Sem MongoDB) ---
-server.listen(port, () => {
-    console.log(`Servidor rodando com sucesso!`);
-    console.log(`Acesse o Escudo do Mestre em: http://localhost:${port}/dm`);
+// --- NOVO: Start the server (COM MongoDB) ---
+// Primeiro conecta ao banco, DEPOIS inicia o servidor
+connectToDB().then(() => {
+    server.listen(port, () => {
+        console.log(`Servidor rodando com sucesso!`);
+        console.log(`Acesse o Escudo do Mestre em: http://localhost:${port}/dm`);
+    });
 });
