@@ -1,4 +1,4 @@
-// server.js (MODIFICADO COM MONGODB)
+// server.js (REVERTIDO PARA BANCO EM MEMÓRIA)
 
 const http = require('http');
 const path = require('path');
@@ -6,20 +6,18 @@ const express = require('express');
 const crypto = require('crypto');
 const socketIo = require('socket.io');
 
-// NOVO: Mongoose e DotEnv
-const mongoose = require('mongoose');
-require('dotenv').config(); // Carrega as variáveis do arquivo .env
-
-// NOVO: Importar o modelo do jogador
-const Player = require('./models/Player');
+// --- Mongoose e DotEnv REMOVIDOS ---
+// const mongoose = require('mongoose');
+// require('dotenv').config(); 
+// const Player = require('./models/Player');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
-const port = process.env.PORT || 3000; // Importante para o Render
+const port = process.env.PORT || 3000;
 
-// --- "Banco de Dados" em memória REMOVIDO ---
-// let playersDB = {}; // Removido
+// --- "Banco de Dados" em memória RE-ADICIONADO ---
+let playersDB = {}; // Armazena os jogadores aqui
 
 // --- Funções de Persistência (Removidas) ---
 // ...
@@ -27,15 +25,15 @@ const port = process.env.PORT || 3000; // Importante para o Render
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// --- API ROUTES (Modificadas com async/await) ---
+// --- API ROUTES (Modificadas sem async/await) ---
 
 // [API] Rota para criar um novo jogador
-app.post('/api/player', async (req, res) => {
+app.post('/api/player', (req, res) => {
     try {
         const playerId = crypto.randomBytes(8).toString('hex');
         
-        // Usa o Schema do Mongoose para criar o novo jogador
-        const newPlayer = new Player({
+        // Objeto padrão do novo jogador
+        const newPlayer = {
             id: playerId,
             nome: "Novo Mutante",
             papel: "",
@@ -49,9 +47,9 @@ app.post('/api/player', async (req, res) => {
             'pontos-mutacao': 10,
             protecao: 0,
             balas: 0
-        });
+        };
 
-        await newPlayer.save(); // Salva no MongoDB
+        playersDB[playerId] = newPlayer; // Salva no objeto em memória
         
         console.log(`Novo jogador criado. ID: ${playerId}`);
         
@@ -65,9 +63,10 @@ app.post('/api/player', async (req, res) => {
 });
 
 // [API] Rota para o Mestre buscar TODOS os jogadores
-app.get('/api/players', async (req, res) => {
+app.get('/api/players', (req, res) => {
     try {
-        const players = await Player.find({}); // Busca todos os jogadores no DB
+        // Converte o objeto de jogadores em um array
+        const players = Object.values(playersDB); 
         res.json(players);
     } catch (error) {
         console.error("Erro ao buscar jogadores:", error);
@@ -76,11 +75,10 @@ app.get('/api/players', async (req, res) => {
 });
 
 // [API] Rota para um jogador buscar SEUS dados
-app.get('/api/player/:id', async (req, res) => {
+app.get('/api/player/:id', (req, res) => {
     try {
         const { id } = req.params;
-        // Busca um jogador pelo campo "id" customizado
-        const playerData = await Player.findOne({ id: id }); 
+        const playerData = playersDB[id]; // Busca no objeto em memória
         
         if (playerData) {
             res.json(playerData);
@@ -94,23 +92,19 @@ app.get('/api/player/:id', async (req, res) => {
 });
 
 // [API] Rota para um jogador SALVAR seus dados
-app.post('/api/player/:id/update', async (req, res) => {
+app.post('/api/player/:id/update', (req, res) => {
     try {
         const { id } = req.params;
-        
-        // Encontra o jogador pelo "id" e atualiza com os dados do req.body
-        // { new: true } retorna o documento atualizado
-        const updatedPlayer = await Player.findOneAndUpdate(
-            { id: id }, 
-            req.body, 
-            { new: true, runValidators: true, strict: false }
-        );
+        const updatedPlayer = playersDB[id];
 
         if (updatedPlayer) {
-            console.log(`Dados salvos para o jogador: ${updatedPlayer.nome || id}`);
+            // Atualiza os dados do jogador em memória mesclando o req.body
+            playersDB[id] = { ...updatedPlayer, ...req.body };
+            
+            console.log(`Dados salvos para o jogador: ${playersDB[id].nome || id}`);
             
             // Emite a atualização para todos os clientes
-            io.emit('playerUpdated', updatedPlayer);
+            io.emit('playerUpdated', playersDB[id]);
             
             res.json({ success: true, message: "Dados salvos." });
         } else {
@@ -123,12 +117,14 @@ app.post('/api/player/:id/update', async (req, res) => {
 });
 
 // [API] Rota para REMOVER um jogador
-app.post('/api/player/:id/delete', async (req, res) => {
+app.post('/api/player/:id/delete', (req, res) => {
     try {
         const { id } = req.params;
-        const deletedPlayer = await Player.findOneAndDelete({ id: id });
+        const deletedPlayer = playersDB[id];
 
         if (deletedPlayer) {
+            delete playersDB[id]; // Remove do objeto em memória
+            
             console.log(`Jogador removido: ${deletedPlayer.nome} (ID: ${id})`);
             
             // Notifica todos os clientes que este jogador foi removido
@@ -145,16 +141,16 @@ app.post('/api/player/:id/delete', async (req, res) => {
 });
 
 
-// --- PAGE ROUTES (Modificadas com async/await) ---
+// --- PAGE ROUTES (Modificadas sem async/await) ---
 
 app.get('/dm', (req, res) => {
     res.sendFile(path.join(__dirname, 'dm.html'));
 });
 
-app.get('/player/:id', async (req, res) => { // Rota agora é async
+app.get('/player/:id', (req, res) => { // Rota não é mais async
     try {
-        // Verifica se o jogador existe no DB
-        const player = await Player.findOne({ id: req.params.id }); 
+        // Verifica se o jogador existe no DB em memória
+        const player = playersDB[req.params.id]; 
         
         if (player) {
             res.sendFile(path.join(__dirname, 'index.html'));
@@ -185,25 +181,8 @@ io.on('connection', (socket) => {
 });
 
 
-// --- NOVO: Start the server & Connect to MongoDB ---
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-    throw new Error('A variável de ambiente MONGODB_URI não foi definida!');
-}
-
-console.log('Conectando ao MongoDB...');
-mongoose.connect(MONGODB_URI)
-    .then(() => {
-        console.log('Conectado ao MongoDB com sucesso!');
-        
-        // Inicia o servidor APENAS após conectar ao DB
-        server.listen(port, () => {
-            console.log(`Servidor rodando com sucesso!`);
-            console.log(`Acesse o Escudo do Mestre em: http://localhost:${port}/dm`);
-        });
-    })
-    .catch(err => {
-        console.error('Falha ao conectar ao MongoDB:', err);
-        process.exit(1); // Encerra o processo se não conseguir conectar
-    });
+// --- NOVO: Start the server (Sem MongoDB) ---
+server.listen(port, () => {
+    console.log(`Servidor rodando com sucesso!`);
+    console.log(`Acesse o Escudo do Mestre em: http://localhost:${port}/dm`);
+});
