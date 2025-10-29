@@ -29,6 +29,7 @@
             justify-content: center;
             gap: 15px;
             margin-bottom: 30px;
+            flex-wrap: wrap; /* [NOVO] Permite quebra de linha em telas menores */
         }
         .dm-btn {
             background-color: #e67e22;
@@ -44,6 +45,15 @@
         .dm-btn:hover {
             background-color: #d35400;
         }
+        
+        /* [NOVO] Estilo para o botão de importar */
+        #import-player-btn {
+            background-color: #3498db;
+        }
+        #import-player-btn:hover {
+            background-color: #2980b9;
+        }
+        
         #player-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -207,16 +217,17 @@
             font-weight: bold;
         }
 
+        /* [MODIFICADO] Ações do Card para 2x2 Grid */
         .card-actions {
             padding: 10px 15px;
-            display: flex;
+            display: grid; /* MUDADO */
+            grid-template-columns: 1fr 1fr; /* MUDADO */
             gap: 8px;
-            justify-content: space-between;
             border-top: 1px solid #444;
             background-color: #252525;
         }
         .card-actions button, .card-actions a {
-            flex: 1;
+            /* flex: 1; REMOVIDO */
             padding: 8px 10px;
             text-decoration: none;
             text-align: center;
@@ -227,10 +238,16 @@
             font-size: 0.9em;
             transition: background-color 0.2s;
         }
+        
         .btn-open { background-color: #e67e22; color: #fff; }
         .btn-open:hover { background-color: #d35400; }
         .btn-copy { background-color: #777; color: #fff; }
         .btn-copy:hover { background-color: #666; }
+        
+        /* [NOVO] Estilo do Botão Exportar */
+        .btn-export { background-color: #3498db; color: #fff; }
+        .btn-export:hover { background-color: #2980b9; }
+        
         .btn-remove { background-color: #c0392b; color: #fff; }
         .btn-remove:hover { background-color: #a93226; }
 
@@ -346,12 +363,15 @@
 
     <div class="controls">
         <button class="dm-btn" id="create-player-btn">Criar Nova Ficha de Jogador</button>
+        <button class="dm-btn" id="import-player-btn">Importar Ficha (JSON)</button>
     </div>
 
     <main>
         <div id="player-grid">
             </div>
     </main>
+    
+    <input type="file" id="json-file-input" accept=".json" style="display: none;">
     
     <div id="notification-box"></div>
 
@@ -369,6 +389,13 @@
             const playerGrid = document.getElementById('player-grid');
             const createPlayerBtn = document.getElementById('create-player-btn');
             const notificationBox = document.getElementById('notification-box');
+            
+            // [NOVO] Elementos de Importação
+            const importPlayerBtn = document.getElementById('import-player-btn');
+            const jsonFileInput = document.getElementById('json-file-input');
+            
+            // [NOVO] Cache local de dados dos jogadores para exportação
+            let allPlayersData = {}; 
 
             const socket = io();
 
@@ -379,6 +406,24 @@
                 setTimeout(() => {
                     notificationBox.classList.remove('visible');
                 }, 3000);
+            }
+            
+            // [NOVA] Função auxiliar para forçar o download de JSON
+            function downloadJSON(data, filename) {
+                // Formata o JSON para ficar legível (null, 2)
+                const jsonStr = JSON.stringify(data, null, 2);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Limpa
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
             }
 
             // --- Funções Auxiliares (Tema Mutant Ano Zero) ---
@@ -491,9 +536,26 @@
                     <div class="card-actions">
                         <a href="${playerLink}" target="_blank" class="btn-open">Ficha</a>
                         <button class="btn-copy" data-link="${playerLink}">Link</button>
+                        <button class="btn-export" data-id="${playerData.id}">Exportar</button>
                         <button class="btn-remove" data-id="${playerData.id}" data-name="${playerData.nome || 'Sem Nome'}">Remover</button>
                     </div>
                 `;
+                
+                // --- [NOVOS] Event Listeners de Exportar/Remover/Copiar ---
+                
+                // Evento Exportar JSON
+                playerCard.querySelector('.btn-export').addEventListener('click', (e) => {
+                    const playerId = e.target.dataset.id;
+                    const playerDataToExport = allPlayersData[playerId]; // Pega do cache
+                    
+                    if (playerDataToExport) {
+                        // Cria um nome de arquivo "seguro"
+                        const playerName = (playerDataToExport.nome || 'mutante').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        downloadJSON(playerDataToExport, `${playerName}_${playerId}.json`);
+                    } else {
+                        showNotification('Erro: Dados do jogador não encontrados.', '#c0392b');
+                    }
+                });
                 
                 // Evento Copiar Link
                 playerCard.querySelector('.btn-copy').addEventListener('click', (e) => {
@@ -531,11 +593,13 @@
                     const players = await response.json();
                     
                     playerGrid.innerHTML = ''; 
+                    allPlayersData = {}; // [NOVO] Limpa o cache
                     
                     if (players.length === 0) {
                         playerGrid.innerHTML = '<p style="text-align: center; color: #ccc;">Nenhuma ficha de jogador foi criada ainda.</p>';
                     } else {
                         players.forEach(playerData => {
+                            allPlayersData[playerData.id] = playerData; // [NOVO] Salva no cache
                             renderPlayerCard(playerData);
                         });
                     }
@@ -550,7 +614,8 @@
             // Botão de Criar Ficha
             createPlayerBtn.addEventListener('click', async () => {
                 try {
-                    const response = await fetch('/api/player', { method: 'POST' });
+                    // Envia uma requisição POST vazia, o servidor usará o padrão
+                    const response = await fetch('/api/player', { method: 'POST' }); 
                     const newPlayer = await response.json();
                     
                     const playerLink = `${window.location.origin}/player/${newPlayer.id}`;
@@ -562,6 +627,44 @@
                     showNotification('Erro ao criar nova ficha.', '#c0392b');
                 }
             });
+            
+            // --- [NOVO] Lógica de Importação de Ficha ---
+            importPlayerBtn.addEventListener('click', () => {
+                jsonFileInput.click(); // Abre o seletor de arquivos
+            });
+
+            jsonFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        
+                        // Envia os dados lidos para a rota de criação
+                        const response = await fetch('/api/player', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(importedData),
+                        });
+
+                        if (!response.ok) throw new Error('Falha ao importar ficha para o servidor.');
+                        
+                        const newPlayer = await response.json();
+                        showNotification(`Ficha "${newPlayer.nome}" importada com sucesso!`);
+                        
+                    } catch (error) {
+                        console.error('Erro ao importar JSON:', error);
+                        showNotification('Erro: O arquivo JSON é inválido.', '#c0392b');
+                    }
+                    // Limpa o input para permitir importar o mesmo arquivo novamente
+                    jsonFileInput.value = null; 
+                };
+                reader.readAsText(file);
+            });
+            // --- FIM: Lógica de Importação ---
+
 
             // --- LÓGICA DO PAINEL DE LOG DE ROLAGENS ---
             const diceLogPanel = document.getElementById('dice-log-panel');
@@ -612,15 +715,19 @@
                 const noPlayerMsg = playerGrid.querySelector('p');
                 if (noPlayerMsg) noPlayerMsg.remove();
                 
+                allPlayersData[newPlayer.id] = newPlayer; // [NOVO] Atualiza cache
                 renderPlayerCard(newPlayer);
             });
 
             socket.on('playerUpdated', (updatedPlayer) => {
                 console.log('Ficha de jogador atualizada (via Socket.io):', updatedPlayer.nome);
+                allPlayersData[updatedPlayer.id] = updatedPlayer; // [NOVO] Atualiza cache
                 renderPlayerCard(updatedPlayer);
             });
 
             socket.on('playerDeleted', (playerId) => {
+                delete allPlayersData[playerId]; // [NOVO] Remove do cache
+                
                 const card = document.getElementById(`player-card-${playerId}`);
                 if (card) {
                     const playerName = card.querySelector('h3').textContent;
